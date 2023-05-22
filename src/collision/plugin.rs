@@ -1,139 +1,113 @@
-use bevy::prelude::*;
+use std::{fmt::Debug, hash::Hash, marker::PhantomData};
+
+use bevy::{prelude::*, utils::HashSet};
 use bevy_rapier2d::prelude::*;
-use strum::{EnumIter, IntoEnumIterator};
 
 use crate::{kinematics::Orientation, GameSet};
 
-use super::COLLISION_SENSOR_GROUP;
+pub trait CollisionSensorComponent =
+    CollisionSensor + Component + Copy + Eq + PartialEq + Hash + Send + Sync + 'static;
 
-pub struct CollisionPlugin;
+pub struct CollisionPlugin<T> {
+    phantom: PhantomData<T>,
+}
 
-impl Plugin for CollisionPlugin {
-    fn build(&self, app: &mut App) {
-        app.add_system(add_collision_sensor.in_set(GameSet::BeforeUpdate))
-            .add_system(
-                flip_sensor
-                    .in_set(GameSet::BeforeUpdate)
-                    .after(add_collision_sensor),
-            )
-            .add_system(
-                detect_collision
-                    .in_set(GameSet::BeforeUpdate)
-                    .after(flip_sensor),
-            );
-        // .add_system(print_collision);
+impl<T: CollisionSensorComponent> Default for CollisionPlugin<T> {
+    fn default() -> Self {
+        Self {
+            phantom: PhantomData,
+        }
     }
 }
 
-#[derive(Bundle, Default)]
-pub struct CollisionBundle {
-    pub collision: Collision,
+impl<T: CollisionSensorComponent + Debug> Plugin for CollisionPlugin<T> {
+    fn build(&self, app: &mut App) {
+        app.add_system(add_collision_sensor::<T>.in_set(GameSet::BeforeUpdate))
+            .add_system(
+                flip_sensor::<T>
+                    .in_set(GameSet::BeforeUpdate)
+                    .after(add_collision_sensor::<T>),
+            )
+            .add_system(
+                detect_collision::<T>
+                    .in_set(GameSet::BeforeUpdate)
+                    .after(flip_sensor::<T>),
+            );
+    }
+}
+
+pub trait CollisionSensor: Sized {
+    fn get_sensors() -> Vec<(Self, Collider, Vec2, CollisionGroups)>;
+}
+
+#[derive(Bundle)]
+pub struct CollisionBundle<T: CollisionSensorComponent> {
     pub collider: Collider,
-    pub group: CollisionGroups,
+    pub collisions: Collision<T>,
 }
 
-#[derive(Debug, Clone, Copy, EnumIter)]
-pub enum Direction {
-    Up = 0,
-    Down = 1,
-    Back = 2,
-    Front = 3,
-    DownBack = 4,
-    DownFront = 5,
-    UpBack = 6,
-    UpFront = 7,
-}
-
-impl Direction {
-    fn get_sensor_spec(
-        &self,
-        collider_hx: f32,
-        collider_hy: f32,
-        orientation: f32,
-    ) -> (f32, f32, f32, f32) {
-        match self {
-            Direction::Up => (0.0, collider_hy, collider_hx - 2.0, 1.0),
-            Direction::Down => (0.0, -collider_hy, collider_hx - 2.0, 1.0),
-            Direction::Back => (-collider_hx * orientation, 0.0, 1.0, collider_hy - 2.0),
-            Direction::Front => (collider_hx * orientation, 0.0, 1.0, collider_hy - 2.0),
-            Direction::DownBack => (-collider_hx * orientation, -collider_hy, 1.0, 1.0),
-            Direction::UpBack => (-collider_hx * orientation, collider_hy, 1.0, 1.0),
-            Direction::DownFront => (collider_hx * orientation, -collider_hy, 1.0, 1.0),
-            Direction::UpFront => (collider_hx * orientation, collider_hy, 1.0, 1.0),
+impl<T: CollisionSensorComponent> Default for CollisionBundle<T> {
+    fn default() -> Self {
+        Self {
+            collider: Collider::default(),
+            collisions: Collision::default(),
         }
     }
 }
 
 #[derive(Component)]
-struct CollisionSensor(Direction);
-
-#[derive(Component, Default)]
-pub struct Collision {
-    dimensions: (f32, f32),
-    pub collisions: u8,
+pub struct Collision<T> {
+    pub collisions: HashSet<T>,
 }
 
-impl Collision {
-    pub fn clear_collisions(&mut self) {
-        self.collisions = 0;
-    }
-
-    pub fn down(&self) -> bool {
-        self.collisions & (1 << Direction::Down as u8) != 0
-    }
-
-    pub fn up(&self) -> bool {
-        self.collisions & (1 << Direction::Up as u8) != 0
-    }
-
-    pub fn front(&self) -> bool {
-        self.collisions & (1 << Direction::Front as u8) != 0
-    }
-
-    pub fn down_front(&self) -> bool {
-        self.collisions & (1 << Direction::DownFront as u8) != 0
-    }
-
-    pub fn add(&mut self, direction: Direction) {
-        self.collisions |= 1 << direction as u8
+impl<T: CollisionSensorComponent> Default for Collision<T> {
+    fn default() -> Self {
+        Self {
+            collisions: HashSet::new(),
+        }
     }
 }
 
-fn add_collision_sensor(
+impl<T: Eq + PartialEq + Hash> Collision<T> {
+    pub fn add(&mut self, sensor: T) {
+        self.collisions.insert(sensor);
+    }
+
+    pub fn remove(&mut self, sensor: &T) {
+        self.collisions.remove(sensor);
+    }
+
+    pub fn get(&self, sensor: &T) -> bool {
+        self.collisions.contains(sensor)
+    }
+}
+
+impl<T: CollisionSensor> Collision<T> {
+    pub fn get_sensors(&self) -> Vec<(T, Collider, Vec2, CollisionGroups)> {
+        T::get_sensors()
+    }
+}
+
+pub fn add_collision_sensor<T: CollisionSensorComponent>(
     mut commands: Commands,
-    mut entity_query: Query<
-        (Entity, &Collider, &mut Collision, Option<&Orientation>),
-        Added<Collision>,
-    >,
+    mut entity_query: Query<(Entity, &mut Collision<T>), Added<Collision<T>>>,
 ) {
-    for (entity, collider, mut collision, orientation) in entity_query.iter_mut() {
-        collision.dimensions = get_collider_dimension(collider);
-        let orientation = orientation
-            .map(|o| match o {
-                Orientation::Right => 1.0,
-                Orientation::Left => -1.0,
-            })
-            .unwrap_or(1.0);
-
-        let sensor_entities: Vec<Entity> = Direction::iter()
-            .map(|direction| {
-                let (x, y, hx, hy) = direction.get_sensor_spec(
-                    collision.dimensions.0,
-                    collision.dimensions.1,
-                    orientation,
-                );
-
+    for (entity, collision) in entity_query.iter_mut() {
+        let sensor_entities: Vec<Entity> = collision
+            .get_sensors()
+            .into_iter()
+            .map(|(sensor, collider, relative_position, collision_group)| {
                 commands
                     .spawn((
-                        Collider::cuboid(hx, hy),
+                        collider,
+                        sensor,
+                        collision_group,
                         Transform {
-                            translation: Vec3::new(x, y, 0.0),
+                            translation: Vec3::new(relative_position.x, relative_position.y, 0.0),
                             ..default()
                         },
                         Sensor,
-                        CollisionSensor(direction),
                         ColliderScale::Absolute(Vec2::splat(1.0)),
-                        COLLISION_SENSOR_GROUP,
                         (ActiveCollisionTypes::default()
                             | ActiveCollisionTypes::KINEMATIC_STATIC
                             | ActiveCollisionTypes::STATIC_STATIC),
@@ -146,56 +120,45 @@ fn add_collision_sensor(
     }
 }
 
-fn detect_collision(
-    mut collision_query: Query<(&Children, &mut Collision)>,
-    sensor_query: Query<(Entity, &CollisionSensor)>,
+fn detect_collision<T: CollisionSensorComponent + Debug>(
+    mut collision_query: Query<(&Children, &mut Collision<T>)>,
+    sensor_query: Query<(Entity, &T)>,
     rapier_context: Res<RapierContext>,
 ) {
     for (children, mut collision) in collision_query.iter_mut() {
-        collision.clear_collisions();
+        // collision.clear_collisions();
 
         for &child in children.iter() {
             if let Ok((entity, sensor)) = sensor_query.get(child) {
-                rapier_context
+                let colliding = rapier_context
                     .intersections_with(entity)
-                    .any(|(_, _, intersecting)| intersecting)
-                    .then(|| collision.add(sensor.0));
+                    .any(|(_, _, intersecting)| intersecting);
+                match colliding {
+                    true => {
+                        if !collision.get(sensor) {
+                            collision.add(*sensor);
+                        }
+                    }
+                    false => {
+                        if collision.get(sensor) {
+                            collision.remove(sensor);
+                        }
+                    }
+                }
             }
         }
     }
 }
 
-fn flip_sensor(
-    collision_query: Query<(&Children, &Orientation, &Collision), Changed<Orientation>>,
-    mut sensor_query: Query<(&mut Transform, &CollisionSensor)>,
+fn flip_sensor<T: CollisionSensorComponent>(
+    collision_query: Query<&Children, Changed<Orientation>>,
+    mut sensor_query: Query<&mut Transform, With<T>>,
 ) {
-    for (children, orientation, collision) in collision_query.iter() {
+    for children in collision_query.iter() {
         for &child in children.iter() {
-            let orientation = match orientation {
-                Orientation::Right => 1.0,
-                Orientation::Left => -1.0,
-            };
-            if let Ok((mut transform, sensor)) = sensor_query.get_mut(child) {
-                let (x, y, _, _) = sensor.0.get_sensor_spec(
-                    collision.dimensions.0,
-                    collision.dimensions.1,
-                    orientation,
-                );
-                transform.translation = Vec3::new(x, y, transform.translation.z);
+            if let Ok(mut transform) = sensor_query.get_mut(child) {
+                transform.translation.x = -transform.translation.x;
             }
         }
-    }
-}
-
-fn get_collider_dimension(collider: &Collider) -> (f32, f32) {
-    match collider.raw.shape_type() {
-        bevy_rapier2d::rapier::prelude::ShapeType::Capsule => (
-            collider.as_capsule().unwrap().radius(),
-            collider.as_capsule().unwrap().half_height() + collider.as_capsule().unwrap().radius(),
-        ),
-        _ => panic!(
-            "unsupported collider type {:?} for collision detection",
-            collider.raw.shape_type()
-        ),
     }
 }

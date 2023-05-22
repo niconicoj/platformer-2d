@@ -40,22 +40,6 @@ impl Default for FpsState {
     }
 }
 
-impl FpsState {
-    pub fn enable(&mut self) {
-        self.timer.unpause();
-        self.update_now = true;
-    }
-
-    pub fn disable(&mut self) {
-        self.timer.pause();
-        self.update_now = true;
-    }
-
-    pub fn enabled(&self) -> bool {
-        !self.timer.paused()
-    }
-}
-
 fn update(
     time: Res<Time>,
     diagnostics: Res<Diagnostics>,

@@ -1,5 +1,7 @@
 #![feature(trivial_bounds)]
 #![feature(const_trait_impl)]
+#![feature(trait_alias)]
+
 mod animation;
 mod background;
 mod collision;
@@ -20,7 +22,6 @@ use bevy::{
 };
 use bevy_inspector_egui::quick::WorldInspectorPlugin;
 use bevy_rapier2d::prelude::*;
-use collision::CollisionPlugin;
 use fps::FpsPlugin;
 use kinematics::KinematicsPlugin;
 use knight::KnightPlugin;
@@ -43,14 +44,13 @@ fn main() {
         .add_plugin(RapierPhysicsPlugin::<NoUserData>::pixels_per_meter(100.0))
         .add_plugin(PhysicsExtensionPlugin)
         .add_plugin(RapierDebugRenderPlugin::default())
-        .add_plugin(CollisionPlugin)
         .add_plugin(FpsPlugin)
         .add_plugin(BackgroundPlugin)
         .add_plugin(MapPlugin)
         .add_plugin(AnimationPlugin)
         .add_plugin(PlayerPlugin)
         .add_plugin(KinematicsPlugin)
-        .add_plugin(KnightPlugin)
+        // .add_plugin(KnightPlugin)
         .configure_sets(
             (
                 GameSet::BeforeUpdate,
