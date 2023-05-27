@@ -6,7 +6,7 @@ use bevy_rapier2d::prelude::*;
 use crate::{kinematics::Orientation, GameSet};
 
 pub trait CollisionSensorComponent =
-    CollisionSensor + Component + Copy + Eq + PartialEq + Hash + Send + Sync + 'static;
+    CollisionSensor + Component + Debug + Copy + Eq + PartialEq + Hash + Send + Sync + 'static;
 
 pub struct CollisionPlugin<T> {
     phantom: PhantomData<T>,
@@ -99,6 +99,7 @@ pub fn add_collision_sensor<T: CollisionSensorComponent>(
             .map(|(sensor, collider, relative_position, collision_group)| {
                 commands
                     .spawn((
+                        Name::new(format!("{:?} sensor", sensor)),
                         collider,
                         sensor,
                         collision_group,
@@ -109,6 +110,7 @@ pub fn add_collision_sensor<T: CollisionSensorComponent>(
                         Sensor,
                         ColliderScale::Absolute(Vec2::splat(1.0)),
                         (ActiveCollisionTypes::default()
+                            | ActiveCollisionTypes::KINEMATIC_KINEMATIC
                             | ActiveCollisionTypes::KINEMATIC_STATIC
                             | ActiveCollisionTypes::STATIC_STATIC),
                     ))
@@ -126,8 +128,6 @@ fn detect_collision<T: CollisionSensorComponent + Debug>(
     rapier_context: Res<RapierContext>,
 ) {
     for (children, mut collision) in collision_query.iter_mut() {
-        // collision.clear_collisions();
-
         for &child in children.iter() {
             if let Ok((entity, sensor)) = sensor_query.get(child) {
                 let colliding = rapier_context

@@ -1,12 +1,33 @@
+use std::marker::PhantomData;
+
 use bevy::prelude::*;
 
 use crate::GameSet;
 
-pub struct AnimationPlugin;
+pub trait AnimationStateComponent = AnimationState + Component + Send + Sync + 'static;
+pub trait AnimationHandlesComponent<T: AnimationState> =
+    AnimationHandles<T> + Resource + Default + Send + Sync + 'static;
 
-impl Plugin for AnimationPlugin {
+pub struct AnimationPlugin<T: AnimationStateComponent, U: AnimationHandlesComponent<T>> {
+    phantom_t: PhantomData<T>,
+    phantom_u: PhantomData<U>,
+}
+
+impl<T: AnimationStateComponent, U: AnimationHandlesComponent<T>> Default
+    for AnimationPlugin<T, U>
+{
+    fn default() -> Self {
+        Self {
+            phantom_t: PhantomData,
+            phantom_u: PhantomData,
+        }
+    }
+}
+
+impl<T: AnimationStateComponent, U: AnimationHandlesComponent<T>> Plugin for AnimationPlugin<T, U> {
     fn build(&self, app: &mut App) {
-        app.add_system(animate.in_set(GameSet::Render));
+        app.init_resource::<U>()
+            .add_system(update_animation::<T, U>.in_set(GameSet::AfterUpdate));
     }
 }
 
@@ -78,7 +99,10 @@ pub fn update_animation<T: AnimationState + Component, U: AnimationHandles<T> + 
     }
 }
 
-fn animate(time: Res<Time>, mut animation_query: Query<(&mut Animation, &mut TextureAtlasSprite)>) {
+pub fn animate(
+    time: Res<Time>,
+    mut animation_query: Query<(&mut Animation, &mut TextureAtlasSprite)>,
+) {
     for (mut animation, mut texture_atlas_sprite) in animation_query.iter_mut() {
         animation.timer.tick(time.delta());
         if animation.timer.just_finished() {

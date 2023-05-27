@@ -49,7 +49,7 @@ pub fn load_knight_textures(
 
     register_texture_atlas(
         KnightState::Attack,
-        "knight/_Run.png",
+        "knight/_Attack.png",
         Vec2::new(120.0, 80.0),
         4,
         1,
@@ -63,8 +63,8 @@ impl AnimationState for KnightState {
     fn get_animation(&self) -> crate::animation::Animation {
         match self {
             Self::Attack => Animation::new(
-                Timer::new(Duration::from_secs_f32(1. / 10.), TimerMode::Once),
-                [0, 0, 0, 1, 2, 3].into_iter().cycle(),
+                Timer::new(Duration::from_secs_f32(1. / 5.), TimerMode::Repeating),
+                [0, 0, 0, 1, 2, 3].into_iter(),
             ),
             _ => Animation::new(
                 Timer::new(Duration::from_secs_f32(1. / 10.), TimerMode::Repeating),

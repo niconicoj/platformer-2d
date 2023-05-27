@@ -14,6 +14,7 @@ use super::{
 
 pub fn init_player(mut commands: Commands, player_sprite_handles: Res<PlayerSpritesHandles>) {
     commands.spawn((
+        Name::new("Player"),
         RigidBody::KinematicPositionBased,
         Gravity,
         Player {
@@ -42,6 +43,7 @@ pub fn init_player(mut commands: Commands, player_sprite_handles: Res<PlayerSpri
             filter_groups: Some(PLAYER_COLLIDER_GROUP),
             ..default()
         },
+        PLAYER_COLLIDER_GROUP,
         CollisionBundle::<PlayerSensor> {
             collider: Collider::capsule_y(10.0, 4.0),
             ..default()

@@ -1,6 +1,6 @@
 use bevy::prelude::*;
 
-use crate::{animation::update_animation, collision::CollisionPlugin, GameSet};
+use crate::{animation::AnimationPlugin, collision::CollisionPlugin, GameSet};
 
 use super::{
     animation::{load_player_textures, PlayerSpritesHandles},
@@ -20,6 +20,7 @@ impl Plugin for PlayerPlugin {
             .add_startup_system(load_player_textures)
             .add_startup_system(init_player.after(load_player_textures))
             .add_plugin(CollisionPlugin::<PlayerSensor>::default())
+            .add_plugin(AnimationPlugin::<PlayerState, PlayerSpritesHandles>::default())
             .add_system(
                 move_player
                     .in_set(GameSet::Update)
@@ -31,9 +32,6 @@ impl Plugin for PlayerPlugin {
                     .before(update_player_state),
             )
             .add_system(update_player_state.in_set(GameSet::Update))
-            .add_system(
-                update_animation::<PlayerState, PlayerSpritesHandles>.in_set(GameSet::AfterUpdate),
-            )
             .add_system(follow_player.in_set(GameSet::AfterUpdate));
     }
 }

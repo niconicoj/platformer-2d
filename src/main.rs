@@ -14,7 +14,7 @@ mod physics;
 mod player;
 mod texture_utils;
 
-use animation::AnimationPlugin;
+use animation::animate;
 use background::BackgroundPlugin;
 use bevy::{
     input::mouse::{MouseScrollUnit, MouseWheel},
@@ -47,10 +47,9 @@ fn main() {
         .add_plugin(FpsPlugin)
         .add_plugin(BackgroundPlugin)
         .add_plugin(MapPlugin)
-        .add_plugin(AnimationPlugin)
         .add_plugin(PlayerPlugin)
         .add_plugin(KinematicsPlugin)
-        // .add_plugin(KnightPlugin)
+        .add_plugin(KnightPlugin)
         .configure_sets(
             (
                 GameSet::BeforeUpdate,
@@ -61,6 +60,7 @@ fn main() {
                 .chain(),
         )
         .add_startup_system(setup_camera)
+        .add_system(animate.in_set(GameSet::Render))
         .add_system(zoom)
         .run();
 }
